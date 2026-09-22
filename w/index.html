@@ -1,0 +1,56 @@
+# Bootstrap das minhas maquinas (Windows).
+#
+#   irm wladmirjunior.github.io/w | iex
+#
+# Instala chezmoi, Git e 1Password via winget, espera o SSH agent do
+# 1Password e aplica o repo privado de dotfiles.
+# (Fica em w/index.html porque o GitHub Pages serve arquivo sem extensao como
+# binario; como HTML o irm devolve texto puro pro iex.)
+
+$ErrorActionPreference = 'Stop'
+
+$Repo = 'git@github.com:WladmirJunior/dotfiles.git'
+# Chave ed25519 publicada pelo GitHub (fixa pra nao confiar no primeiro contato).
+$GitHubHostKey = 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl'
+
+function Say($msg) { Write-Host "==> $msg" -ForegroundColor Blue }
+
+function Refresh-Path {
+    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                [Environment]::GetEnvironmentVariable('Path', 'User')
+}
+
+function Install-Winget($id) {
+    winget list --id $id -e --accept-source-agreements *> $null
+    if ($LASTEXITCODE -eq 0) { return }
+    Say "instalando $id"
+    winget install --id $id -e --silent --accept-source-agreements --accept-package-agreements
+}
+
+Install-Winget 'twpayne.chezmoi'
+Install-Winget 'Git.Git'
+Install-Winget 'AgileBits.1Password'
+Install-Winget 'AgileBits.1Password.CLI'
+Refresh-Path
+
+# O 1Password expoe o agent no pipe do OpenSSH do Windows; o git precisa usar
+# esse ssh, e nao o que vem junto com o Git for Windows.
+git config --global core.sshCommand 'C:/Windows/System32/OpenSSH/ssh.exe'
+
+$sshDir = Join-Path $HOME '.ssh'
+New-Item -ItemType Directory -Force $sshDir | Out-Null
+$knownHosts = Join-Path $sshDir 'known_hosts'
+if (-not ((Test-Path $knownHosts) -and (Select-String -Quiet -SimpleMatch $GitHubHostKey $knownHosts))) {
+    Add-Content $knownHosts $GitHubHostKey
+}
+
+Say 'abra o 1Password, entre na conta e ative:'
+Say '  Settings > Developer > Use the SSH agent'
+Start-Process '1Password' -ErrorAction SilentlyContinue
+do {
+    Read-Host 'Enter quando o agent estiver ativo'
+    & 'C:/Windows/System32/OpenSSH/ssh-add.exe' -l *> $null
+} until ($LASTEXITCODE -eq 0)
+
+Say 'aplicando dotfiles'
+chezmoi init --apply $Repo
