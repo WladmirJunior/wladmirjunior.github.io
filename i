@@ -4,8 +4,8 @@
 #   curl -fsSL wladmirjunior.github.io/i | sh
 #
 # Instala o chezmoi e o 1Password, espera o SSH agent do 1Password e aplica o
-# repo privado de dotfiles. Nao precisa de git nem das Command Line Tools no
-# Mac: o chezmoi usa o git embutido dele.
+# repo privado de dotfiles via SSH. Precisa de git: no Mac, se as Command Line
+# Tools nao estiverem instaladas, o macOS oferece instalar no primeiro uso.
 set -eu
 
 REPO="git@github.com:WladmirJunior/dotfiles.git"
@@ -94,8 +94,4 @@ grep -qF "$GITHUB_HOSTKEY" "$HOME/.ssh/known_hosts" 2>/dev/null \
 # --- dotfiles ----------------------------------------------------------------
 
 say "aplicando dotfiles"
-# Builtin git so no Mac: la /usr/bin/git e o stub que abre o instalador das
-# Command Line Tools. No Arch o git de verdade ja esta instalado acima.
-builtin_git=false
-[ "$os" = Darwin ] && builtin_git=true
-exec "$chezmoi" init --apply --use-builtin-git="$builtin_git" "$REPO" </dev/tty
+exec "$chezmoi" init --apply "$REPO" </dev/tty
