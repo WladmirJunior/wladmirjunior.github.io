@@ -148,4 +148,5 @@ fi
 # --- dotfiles ----------------------------------------------------------------
 
 say "aplicando dotfiles"
-exec "$chezmoi" init --apply "$REPO" </dev/tty
+# DOTFILES_BRANCH=mac-intel sh i  (perfil do Mac Intel enquanto o branch nao esta no main)
+exec "$chezmoi" init --apply ${DOTFILES_BRANCH:+--branch "$DOTFILES_BRANCH"} "$REPO" </dev/tty
