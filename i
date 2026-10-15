@@ -4,8 +4,8 @@
 #   curl -fsSL wladmirjunior.github.io/i | sh
 #
 # Instala o chezmoi e o 1Password, espera o SSH agent do 1Password e aplica o
-# repo privado de dotfiles via SSH. Precisa de git: no Mac, se as Command Line
-# Tools nao estiverem instaladas, o macOS oferece instalar no primeiro uso.
+# repo privado de dotfiles via SSH. No Mac sem Command Line Tools instala um git
+# standalone (dugite-native) em ~/.local, sem Xcode CLT nem Homebrew.
 set -eu
 
 REPO="git@github.com:WladmirJunior/dotfiles.git"
@@ -90,6 +90,60 @@ mkdir -p "$HOME/.ssh"
 chmod 700 "$HOME/.ssh"
 grep -qF "$GITHUB_HOSTKEY" "$HOME/.ssh/known_hosts" 2>/dev/null \
     || echo "$GITHUB_HOSTKEY" >> "$HOME/.ssh/known_hosts"
+
+# --- git ---------------------------------------------------------------------
+
+# No Mac sem Command Line Tools, /usr/bin/git e um stub que abre o dialogo de
+# instalacao (e `command -v git` passa). Entao git "de verdade" e: um binario que
+# nao seja o stub, ou o stub com as CLT instaladas (xcode-select -p so e seguro
+# de chamar depois de achar o stub, e so se o diretorio das CLT existir).
+real_git() {
+    g="$(command -v git 2>/dev/null)" || return 1
+    [ "$os" = Darwin ] && [ "$g" = /usr/bin/git ] || return 0
+    [ -x /Library/Developer/CommandLineTools/usr/bin/git ] \
+        || [ -x /Applications/Xcode.app/Contents/Developer/usr/bin/git ]
+}
+
+# git standalone do dugite-native (o mesmo do GitHub Desktop), versao e SHA-256
+# fixados. Fica em ~/.local/share/git-<versao> com um wrapper em ~/.local/bin/git.
+install_git_standalone() {
+    gver="2.53.0"
+    base="https://github.com/desktop/dugite-native/releases/download/v2.53.0-4"
+    case "$(uname -m)" in
+        arm64)
+            asset="dugite-native-v2.53.0-4098283-macOS-arm64.tar.gz"
+            sha="f9dc64635a5b62fbd7ad95db73268bbb8912255ac516d65d37bf7af22fcb8ffe" ;;
+        x86_64)
+            asset="dugite-native-v2.53.0-4098283-macOS-x64.tar.gz"
+            sha="ae6686718aa34f4140424db16b92a47dcffd6d1f312eb8b5f3b267f7404e2680" ;;
+        *) die "arquitetura sem git standalone: $(uname -m)" ;;
+    esac
+    dest="$HOME/.local/share/git-$gver"
+    say "sem git (Command Line Tools ausentes): instalando git $gver em $dest"
+    tmp="$(mktemp -d)"
+    curl -fsSL --retry 3 -o "$tmp/$asset" "$base/$asset" || die "falhou baixar o git"
+    [ "$(shasum -a 256 "$tmp/$asset" | cut -d' ' -f1)" = "$sha" ] || die "SHA-256 do git nao confere"
+    rm -rf "$dest"
+    mkdir -p "$dest" "$BIN"
+    tar -xzf "$tmp/$asset" -C "$dest"
+    rm -rf "$tmp"
+    [ -x "$dest/bin/git" ] || die "git nao encontrado em $dest/bin"
+    cat > "$BIN/git" <<WRAP
+#!/bin/sh
+GIT_DIR_BASE="$dest"
+export GIT_EXEC_PATH="\${GIT_EXEC_PATH:-\$GIT_DIR_BASE/libexec/git-core}"
+export GIT_TEMPLATE_DIR="\${GIT_TEMPLATE_DIR:-\$GIT_DIR_BASE/share/git-core/templates}"
+exec "\$GIT_DIR_BASE/bin/git" "\$@"
+WRAP
+    chmod +x "$BIN/git"
+}
+
+# Sempre na frente do PATH: o stub /usr/bin/git nao pode ganhar do nosso.
+PATH="$BIN:$PATH"; export PATH
+if [ "$os" = Darwin ] && ! real_git; then
+    install_git_standalone
+fi
+"$(command -v git)" --version >/dev/null 2>&1 || die "git nao funciona"
 
 # --- dotfiles ----------------------------------------------------------------
 
