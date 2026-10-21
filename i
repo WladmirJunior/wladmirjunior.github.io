@@ -42,6 +42,17 @@ fi
 
 # --- 1Password ---------------------------------------------------------------
 
+install_clt_mac() {
+    [ -x /Library/Developer/CommandLineTools/usr/bin/clang ] && return 0
+    say "instalando Command Line Tools da Apple"
+    touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+    prod="$(softwareupdate -l 2>/dev/null | grep -B 1 -E "Command Line Tools" | awk -F"*" "/^ *\*/ {print $2}" | sed -e "s/^ *//" | tr -d "\n")"
+    if [ -n "$prod" ]; then
+        softwareupdate -i "$prod" --verbose || true
+    fi
+    rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+}
+
 install_1password_mac() {
     [ -d /Applications/1Password.app ] && return 0
     say "instalando 1Password (vai pedir a senha do Mac)"
@@ -63,7 +74,10 @@ install_1password_arch() {
 }
 
 case "$os" in
-    Darwin) install_1password_mac ;;
+    Darwin)
+        install_1password_mac
+        install_clt_mac
+        ;;
     Linux)
         [ -f /etc/arch-release ] || die "so Arch e suportado no Linux por enquanto"
         install_1password_arch
