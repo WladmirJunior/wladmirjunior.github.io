@@ -91,6 +91,14 @@ chmod 700 "$HOME/.ssh"
 grep -qF "$GITHUB_HOSTKEY" "$HOME/.ssh/known_hosts" 2>/dev/null \
     || echo "$GITHUB_HOSTKEY" >> "$HOME/.ssh/known_hosts"
 
+# Pin da chave do GitHub para evitar "Too many authentication failures" quando ha muitas chaves no 1Password
+gh_key="$(SSH_AUTH_SOCK="$agent_sock" ssh-add -L 2>/dev/null | grep -F "SSH: GitHub - Personal Mac" | head -n 1 || true)"
+if [ -n "$gh_key" ]; then
+    printf '%s\n' "$gh_key" > "$HOME/.ssh/github.pub"
+    chmod 644 "$HOME/.ssh/github.pub"
+    export GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -o IdentityFile=$HOME/.ssh/github.pub"
+fi
+
 # --- git ---------------------------------------------------------------------
 
 # No Mac sem Command Line Tools, /usr/bin/git e um stub que abre o dialogo de
